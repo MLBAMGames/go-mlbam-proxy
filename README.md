@@ -1,0 +1,2 @@
+# nhlproxy
+proxy for nhlgames
