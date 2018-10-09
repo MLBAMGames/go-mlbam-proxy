@@ -16,20 +16,18 @@ import (
 type baseHandle struct{}
 
 var (
-    _port        int
-    _destination string
-    _sources   []string
+    _port           int
+    _destination    string
+    _sources        []string
 )
 
 func contains(domains []string, url string) bool {
-    log.Printf("source: %v, value: %v", domains, url)
     for _, domain := range domains {
-        log.Printf("element: %v", domain)
-		if strings.HasSuffix(url, domain) {
-			return true
-		}
-	}
-	return false
+        if strings.HasSuffix(url, domain) {
+            return true
+        }
+    }
+    return false
 }
 
 func getScheme(r *http.Request) string {
@@ -42,11 +40,11 @@ func getScheme(r *http.Request) string {
 func initParameters() {
     log.SetOutput(os.Stdout)
     _sources = []string {}
-	
+
     // removed defaults tags
     flag.IntVar(&_port, "p", 17070, "Port used by the local proxy")
     flag.StringVar(&_destination, "d", "freegamez.ga", "Destination domain to forward source domains requests to.")
-    
+
     sources := flag.String("s", "mf.svc.nhl.com", "Source domains to redirect requests from, separated by commas.")
     for _, hostname := range strings.Split(*sources, ",") {
         _sources = append(_sources, hostname)
@@ -61,27 +59,27 @@ func initParameters() {
 }
 
 func copyRequest(u *url.URL, r *http.Request) (*http.Request, error) {
-	target := r.URL
-	target.Scheme = u.Scheme
+    target := r.URL
+    target.Scheme = u.Scheme
     target.Host = u.Host
 
     req, err := http.NewRequest(r.Method, target.String(), r.Body)
-	if err != nil {
-		return nil, err
-	}
-	for key := range r.Header {
-		req.Header.Set(key, r.Header.Get(key))
-	}
-
-	if r.Referer() != "" {
-		req.Header.Set("Referer", strings.Replace(r.Referer(), r.Host, u.Host, -1))
+    if err != nil {
+        return nil, err
     }
-    
+    for key := range r.Header {
+        req.Header.Set(key, r.Header.Get(key))
+    }
+
+    if r.Referer() != "" {
+        req.Header.Set("Referer", strings.Replace(r.Referer(), r.Host, u.Host, -1))
+    }
+
     r.Header.Add("X-Forwarded-Host", r.Host)
     r.Header.Add("X-Origin-Host", target.Host)
 
-	req.Header.Del("Accept-Encoding")
-	return req, nil
+    req.Header.Del("Accept-Encoding")
+    return req, nil
 }
 
 func setupResponse(w *http.ResponseWriter) {
@@ -125,16 +123,16 @@ func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
             log.Fatalf("Error: %v", err)
             return
         }
-        log.Printf("destination: %v", _destination)
+        //log.Printf("destination: %v", _destination)
         proxyurl = url
-        log.Printf("url1: %v", proxyurl)
+        //log.Printf("url1: %v", proxyurl)
     }
 
     proxy := httputil.NewSingleHostReverseProxy(proxyurl)
-    log.Printf("url2: %v", proxyurl)
+    //log.Printf("url2: %v", proxyurl)
     r, _ = copyRequest(proxyurl, r)
-    log.Printf("proxy request: %v", r.URL)
-    
+    //log.Printf("proxy request: %v", r.URL)
+
     setupResponse(&w)
     proxy.Transport = &http.Transport {
         DialTLS: dialTLS,
