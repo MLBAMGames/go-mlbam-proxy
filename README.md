@@ -1,2 +1,2 @@
-# nhlproxy
-proxy for nhlgames
+# mlbamproxy
+proxy for mblgames and nhlgames
