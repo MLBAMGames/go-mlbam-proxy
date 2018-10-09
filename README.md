@@ -1,2 +1,2 @@
 # mlbam proxy
-proxy for mblgames and nhlgames
+reverse proxy for mblgames and nhlgames
