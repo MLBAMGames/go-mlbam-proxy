@@ -1,4 +1,4 @@
-package mlbamproxy
+package main
 
 import (
 	"crypto/tls"
@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/cssivision/reverseproxy"
 )
 
 type baseHandle struct{}
@@ -170,7 +172,7 @@ func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		proxyURL = url
 	}
 
-	proxy := NewReverseProxy(proxyURL)
+	proxy := reverseproxy.NewReverseProxy(proxyURL)
 
 	r, _ = copyRequest(proxyURL, r)
 
@@ -213,7 +215,7 @@ func runProxyServer() {
 	}
 }
 
-func mlbamproxy() {
+func main() {
 	log.SetOutput(os.Stdout)
 	initParameters()
 	runProxyServer()
