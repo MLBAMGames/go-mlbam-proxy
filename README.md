@@ -1,5 +1,5 @@
 # mlbam proxy
-reverse proxy for any sites, originally made for mblgames and nhlgames
+reverse proxy for any sites, originally made for mlbgames and nhlgames
 
 `mlbamproxy.exe -p 8080 -d example.ddns.net -s google.com,facebook.com,twitter.com`
 
