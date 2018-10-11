@@ -1,4 +1,4 @@
-package main
+package mlbamproxy
 
 import (
 	"crypto/tls"
@@ -11,8 +11,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/cssivision/reverseproxy"
 )
 
 type baseHandle struct{}
@@ -31,6 +29,23 @@ func contains(domains []string, url string) bool {
 	}
 
 	return false
+}
+
+func logError(err error) bool {
+	if err != nil {
+		log.Fatalf("[MLBAMProxy] Error: %v", err)
+		return true
+	}
+
+	return false
+}
+
+func logf(format string, args ...interface{}) {
+	log.Printf("[MLBAMProxy] "+format, args...)
+}
+
+func canRedirect() bool {
+	return len(_sources) > 0 && _destination != ""
 }
 
 func getScheme(r *http.Request) string {
@@ -58,8 +73,7 @@ func getURL(r *http.Request, isDestination bool) (*url.URL, error) {
 	}
 
 	newURL, err := url.Parse(raw)
-	if err != nil {
-		log.Fatal(err)
+	if logError(err) {
 		return nil, err
 	}
 
@@ -67,37 +81,32 @@ func getURL(r *http.Request, isDestination bool) (*url.URL, error) {
 }
 
 func initParameters() {
-	log.SetOutput(os.Stdout)
 	_sources = []string{}
 
-	// removed defaults tags
-	flag.IntVar(&_port, "p", 17070, "Port used by the local proxy")
-	flag.StringVar(&_destination, "d", "freegamez.ga", "Destination domain to forward source domains requests to.")
-
-	sources := flag.String("s", "mf.svc.nhl.com", "Source domains to redirect requests from, separated by commas.")
-	for _, hostname := range strings.Split(*sources, ",") {
-		_sources = append(_sources, hostname)
-	}
+	flag.IntVar(&_port, "p", 8080, "Port used by the local proxy")
+	flag.StringVar(&_destination, "d", "", "Destination domain to forward source domains requests to.")
+	sources := flag.String("s", "", "Source domains to redirect requests from, separated by commas.")
 
 	flag.Parse()
 
-	if _destination == "" || *sources == "" {
-		flag.PrintDefaults()
-		os.Exit(1)
+	for _, hostname := range strings.Split(*sources, ",") {
+		if hostname != "" {
+			_sources = append(_sources, hostname)
+		}
+	}
+
+	if !canRedirect() {
+		logf("Proxy won't redirect, missing flags -s (sources) and/or -d (destination)")
 	}
 }
 
 func copyRequest(u *url.URL, r *http.Request) (*http.Request, error) {
-
 	target, _ := getURL(r, false)
 	target.Scheme = u.Scheme
 	target.Host = u.Host
 
-	log.Printf("url %v, host %v", target, r.Host)
-
 	req, err := http.NewRequest(r.Method, target.String(), r.Body)
-	if err != nil {
-		log.Fatalf("Error: %v", err)
+	if logError(err) {
 		return nil, err
 	}
 
@@ -111,14 +120,6 @@ func copyRequest(u *url.URL, r *http.Request) (*http.Request, error) {
 
 	req.Header.Del("Accept-Encoding")
 
-	// Loop through headers
-	for name, headers := range r.Header {
-		name = strings.ToLower(name)
-		for _, h := range headers {
-			log.Printf("header %v: %v", name, h)
-		}
-	}
-
 	return req, nil
 }
 
@@ -128,23 +129,21 @@ func setupResponse(w *http.ResponseWriter) {
 
 func dialTLS(network, addr string) (net.Conn, error) {
 	conn, err := net.Dial(network, addr)
-	if err != nil {
-		log.Fatal(err)
+	if logError(err) {
 		return nil, err
 	}
 
 	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		log.Fatal(err)
+	if logError(err) {
 		return nil, err
 	}
 
 	cfg := &tls.Config{ServerName: host}
 
 	tlsConn := tls.Client(conn, cfg)
-	if err := tlsConn.Handshake(); err != nil {
+	err = tlsConn.Handshake()
+	if logError(err) {
 		conn.Close()
-		log.Fatal(err)
 		return nil, err
 	}
 
@@ -159,23 +158,19 @@ func dialTLS(network, addr string) (net.Conn, error) {
 
 func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxyURL, err := getURL(r, false)
-	if err != nil {
-		log.Fatalf("Error: %v", err)
+	if logError(err) {
 		return
 	}
 
-	if contains(_sources, r.URL.Hostname()) {
+	if canRedirect() && contains(_sources, r.URL.Hostname()) {
 		url, err := getURL(r, true)
-		if err != nil {
-			log.Fatalf("Error: %v", err)
+		if logError(err) {
 			return
 		}
-		log.Printf("destination: %v", _destination)
 		proxyURL = url
-		log.Printf("url1: %v", proxyURL)
 	}
 
-	proxy := reverseproxy.NewReverseProxy(proxyURL)
+	proxy := NewReverseProxy(proxyURL)
 
 	r, _ = copyRequest(proxyURL, r)
 
@@ -210,15 +205,16 @@ func runProxyServer() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	log.Printf("proxy server listening on port: %d", _port)
+	logf("Proxy server listening on port: %d", _port)
 
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatalf("Error: %v", err)
+	err := server.ListenAndServe()
+	if logError(err) {
 		return
 	}
 }
 
-func main() {
+func mlbamproxy() {
+	log.SetOutput(os.Stdout)
 	initParameters()
 	runProxyServer()
 }
