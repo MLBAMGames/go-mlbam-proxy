@@ -1,7 +1,8 @@
 # mlbam proxy
-reverse proxy for mblgames and nhlgames
+reverse proxy for any sites, originally made for mblgames and nhlgames
 
 ```
+mlbamproxy.exe -p 8080 -d example.ddns.net -s google.com,facebook.com,twitter.com
 -d string
       Destination domain to forward source domains requests to.
 -p int
