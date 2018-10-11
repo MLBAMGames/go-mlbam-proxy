@@ -85,7 +85,7 @@ func getURL(r *http.Request, isDestination bool) (*url.URL, error) {
 func initParameters() {
 	_sources = []string{}
 
-	flag.IntVar(&_port, "p", 8080, "Port used by the local proxy")
+	flag.IntVar(&_port, "p", 17070, "Port used by the local proxy")
 	flag.StringVar(&_destination, "d", "", "Destination domain to forward source domains requests to.")
 	sources := flag.String("s", "", "Source domains to redirect requests from, separated by commas.")
 
