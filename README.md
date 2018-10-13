@@ -10,3 +10,6 @@
 -s string
       Source domains to redirect requests from, separated by commas.
  ```
+
+### projects using mlbamproxy
+- [NHLGames](https://github.com/NHLGames/NHLGames)
