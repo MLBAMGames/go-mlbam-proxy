@@ -12,4 +12,4 @@
  ```
 
 ### projects using mlbamproxy
-- [NHLGames](https://github.com/NHLGames/NHLGames)
+- [NHLGames](https://github.com/NHLGames/NHLGames) Windows front end for watching NHL games
