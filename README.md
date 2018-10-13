@@ -11,5 +11,5 @@
       Source domains to redirect requests from, separated by commas.
  ```
 
-### projects using mlbamproxy
+### projects using mlbam proxy
 - [NHLGames](https://github.com/NHLGames/NHLGames) Windows front end for watching NHL games
