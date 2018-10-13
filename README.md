@@ -1,6 +1,6 @@
 # mlbam proxy
 
-`mlbamproxy.exe -p 8080 -d example.ddns.net -s google.com,facebook.com,twitter.com`
+`mlbamproxy -p 8080 -d example.ddns.net -s google.com,facebook.com,twitter.com`
 
 ```
 -d string
