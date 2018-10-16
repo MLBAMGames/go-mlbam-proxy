@@ -14,4 +14,6 @@
 ### projects using mlbam proxy
 - [NHLGames](https://github.com/NHLGames/NHLGames) Windows front end for watching NHL games
 
-#### [Latest Release](https://github.com/jwallet/mlbamproxy/releases/latest)
+> if you are using mblam proxy in a project please send a pull request to add it to the list.
+
+#### [latest release](https://github.com/jwallet/mlbamproxy/releases/latest)
