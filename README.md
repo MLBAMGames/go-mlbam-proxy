@@ -1,6 +1,6 @@
 # mlbam proxy
 
-`mlbamproxy -p 8080 -d example.ddns.net -s google.com,facebook.com,twitter.com`
+`mlbamproxy -p 17070 -d example.ddns.net -s google.com,facebook.com,twitter.com`
 
 ```
 -d string
@@ -12,7 +12,7 @@
  ```
 
 ### projects using mlbam proxy
-- [NHLGames](https://github.com/NHLGames/NHLGames) Windows front end for watching NHL games
+- [NHLGames](https://github.com/NHLGames/NHLGames) windows front end for watching nhl games
 
 > if you are using mlbam proxy in a project please send a pull request to add it to the list.
 
