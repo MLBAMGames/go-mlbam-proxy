@@ -1,3 +1,8 @@
+Using Windows Powershell
+> $env:GOOS = "{linux/windows}"
+> $env:GOARCH = "{arm/386/amd64}"
+> go build
+
 Using Debian and Caddy
 - cd /usr/local/go/bin/
 - go get -u github.com/mholt/caddy/caddy
