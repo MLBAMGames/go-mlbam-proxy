@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/cssivision/reverseproxy"
 )
@@ -21,6 +20,7 @@ var (
 	_port        int
 	_destination string
 	_sources     []string
+	_debug       bool
 )
 
 func contains(domains []string, url string) bool {
@@ -35,15 +35,21 @@ func contains(domains []string, url string) bool {
 
 func logError(err error) bool {
 	if err != nil {
-		log.Fatalf("[MLBAMProxy] Error: %v", err)
+		log.Printf("[MLBAMProxy] Error: %v", err)
 		return true
 	}
 
 	return false
 }
 
-func logf(format string, args ...interface{}) {
+func printf(format string, args ...interface{}) {
 	log.Printf("[MLBAMProxy] "+format, args...)
+}
+
+func logf(format string, args ...interface{}) {
+	if _debug {
+		log.Printf("[MLBAMProxy] Debug: "+format, args...)
+	}
 }
 
 func canRedirect() bool {
@@ -51,7 +57,7 @@ func canRedirect() bool {
 }
 
 func getScheme(r *http.Request) string {
-	if r.TLS != nil || r.Method == "CONNECT" || r.URL.Scheme == "https" {
+	if r.Method == "CONNECT" {
 		return "https"
 	}
 
@@ -85,6 +91,7 @@ func getURL(r *http.Request, isDestination bool) (*url.URL, error) {
 func initParameters() {
 	_sources = []string{}
 
+	flag.BoolVar(&_debug, "debug", false, "Debug mode")
 	flag.IntVar(&_port, "p", 17070, "Port used by the local proxy")
 	flag.StringVar(&_destination, "d", "", "Destination domain to forward source domains requests to.")
 	sources := flag.String("s", "", "Source domains to redirect requests from, separated by commas.")
@@ -98,7 +105,7 @@ func initParameters() {
 	}
 
 	if !canRedirect() {
-		logf("Proxy won't redirect, missing flags -s (sources) and/or -d (destination)")
+		printf("Proxy won't redirect, missing flags -s (sources) and/or -d (destination)")
 	}
 }
 
@@ -153,7 +160,7 @@ func dialTLS(network, addr string) (net.Conn, error) {
 	cert := cs.PeerCertificates[0]
 
 	cert.VerifyHostname(host)
-	log.Println(cert.Subject)
+	logf("%v", cert.Subject)
 
 	return tlsConn, nil
 }
@@ -164,12 +171,16 @@ func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logf("Request URL: %v", proxyURL)
+
 	if canRedirect() && contains(_sources, r.URL.Hostname()) {
 		url, err := getURL(r, true)
 		if logError(err) {
 			return
 		}
 		proxyURL = url
+
+		logf("Request URL redirected to: %v", proxyURL)
 	}
 
 	proxy := reverseproxy.NewReverseProxy(proxyURL)
@@ -185,9 +196,6 @@ func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy.Director = func(r *http.Request) {
-		r.Header.Add("X-Forwarded-Host", r.Host)
-		r.Header.Add("X-Origin-Host", proxyURL.Host)
-		r.URL.Scheme = getScheme(r)
 		r.URL.Host = proxyURL.Host
 		r.Host = proxyURL.Host
 	}
@@ -200,14 +208,11 @@ func runProxyServer() {
 	http.Handle("/", h)
 
 	server := &http.Server{
-		Addr:           fmt.Sprintf(":%d", _port),
-		Handler:        h,
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20,
+		Addr:    fmt.Sprintf(":%d", _port),
+		Handler: h,
 	}
 
-	logf("Proxy server listening on port: %d", _port)
+	printf("Proxy server listening on port: %d", _port)
 
 	err := server.ListenAndServe()
 	if logError(err) {
