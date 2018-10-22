@@ -5,6 +5,6 @@ Using Debian and Caddy
 - go install github.com/mholt/caddy/caddy
 Caddy installed : `which Caddy`
 Build mlbamproxy
-- env GOOS={linux/windows/darwin} GOARCH={386/amd64} go build
+- env GOOS={linux/windows/darwin} GOARCH={386/amd64/arm} go build
 - e.g GOOS=windows GOARCH=386 go build
 - zip windows.zip {executable}
