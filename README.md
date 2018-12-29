@@ -14,7 +14,7 @@ it's like using the windows hosts file but without the tears. if you are familia
 
 ### projects using mlbam proxy
 - [NHLGames](https://github.com/NHLGames/NHLGames) windows app for watching nhl games
-- [Lazyman](https://github.com/StevensNJD4/LazyMan) linux/mac/windows app for watching nhl/mlb games
+- [LazyMan](https://github.com/StevensNJD4/LazyMan) linux/mac/windows app for watching nhl/mlb games
 
 > if you are using mlbam proxy in a project please send a pull request to add it to the list.
 
