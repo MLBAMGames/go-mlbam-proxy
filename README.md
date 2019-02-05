@@ -1,5 +1,5 @@
 # mlbam proxy
-it's like using the windows hosts file but without the tears. if you are familiar with mitm proxy and its mitmdump command line, it pretty much does the same work but so much faster and without being flagged as a malware.
+it's like using the windows hosts file but without Windows restrictions. if you are familiar with mitm proxy and its mitmdump command line, it pretty much does the same work but way faster and without being flagged as a malware.
 
 `mlbamproxy -p 17070 -d example.ddns.net -s google.com,facebook.com,twitter.com`
 
