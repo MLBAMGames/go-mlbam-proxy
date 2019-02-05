@@ -13,3 +13,5 @@ Build mlbamproxy
 - env GOOS={linux/windows/darwin} GOARCH={386/amd64} go build
 - e.g GOOS=windows GOARCH=386 go build
 - zip windows.zip {executable}
+
+.\go-mlbam-proxy.exe -p 17070 -d freegamez.ga -s mf.svc.nhl.com

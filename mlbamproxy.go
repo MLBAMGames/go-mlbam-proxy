@@ -10,8 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
-
-	"github.com/cssivision/reverseproxy"
+	"time"
 )
 
 type baseHandle struct{}
@@ -60,13 +59,22 @@ func getScheme(r *http.Request) string {
 	if r.Method == "CONNECT" {
 		return "https"
 	}
-
+	if r.URL.Scheme == "wss" {
+		return "wss"
+	}
 	return "http"
+}
+
+func getPort(r *http.Request) string {
+	if r.URL.Scheme == "wss" {
+		return fmt.Sprintf("%v", 443)
+	}
+	return r.URL.Port()
 }
 
 func getURL(r *http.Request, isDestination bool) (*url.URL, error) {
 	hostname := r.URL.Hostname()
-	port := r.URL.Port()
+	port := getPort(r)
 
 	if isDestination {
 		hostname = _destination
@@ -123,8 +131,15 @@ func copyRequest(u *url.URL, r *http.Request) (*http.Request, error) {
 		req.Header.Set(key, r.Header.Get(key))
 	}
 
+	req.Header.Set("Host", u.Host)
+
 	if r.Referer() != "" {
 		req.Header.Set("Referer", strings.Replace(r.Referer(), r.Host, u.Host, -1))
+	}
+
+	req.Header.Set("X-Forwarded-Proto", "http")
+	if r.TLS != nil {
+		req.Header.Set("X-Forwarded-Proto", "https")
 	}
 
 	req.Header.Del("Accept-Encoding")
@@ -183,16 +198,21 @@ func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		logf("Request URL redirected to: %v", proxyURL)
 	}
 
-	proxy := reverseproxy.NewReverseProxy(proxyURL)
+	proxy := NewReverseProxy(proxyURL)
+	// default timeout to 12 hour
+	proxy.Timeout = time.Hour * 12
 
 	r, _ = copyRequest(proxyURL, r)
 
 	setupResponse(&w)
 
 	proxy.Transport = &http.Transport{
-		DialTLS:         dialTLS,
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		TLSNextProto:    make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+		DialTLS: dialTLS,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"h2", "http/1.1"},
+		},
+		TLSNextProto: make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
 	}
 
 	proxy.Director = func(r *http.Request) {
@@ -213,8 +233,8 @@ func runProxyServer() {
 	}
 
 	printf("Proxy server listening on port: %d", _port)
-
 	err := server.ListenAndServe()
+	server.SetKeepAlivesEnabled(false)
 	if logError(err) {
 		return
 	}
