@@ -10,8 +10,9 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 )
+
+const version = "1.1.0"
 
 type baseHandle struct{}
 
@@ -20,6 +21,7 @@ var (
 	_destination string
 	_sources     []string
 	_debug       bool
+	_version     bool
 )
 
 func contains(domains []string, url string) bool {
@@ -67,7 +69,7 @@ func getScheme(r *http.Request) string {
 
 func getPort(r *http.Request) string {
 	if r.URL.Scheme == "wss" {
-		return fmt.Sprintf("%v", 443)
+		return fmt.Sprintf("%v", _port)
 	}
 	return r.URL.Port()
 }
@@ -100,11 +102,17 @@ func initParameters() {
 	_sources = []string{}
 
 	flag.BoolVar(&_debug, "debug", false, "Debug mode")
+	flag.BoolVar(&_version, "v", false, "Version")
 	flag.IntVar(&_port, "p", 17070, "Port used by the local proxy")
 	flag.StringVar(&_destination, "d", "", "Destination domain to forward source domains requests to.")
-	sources := flag.String("s", "", "Source domains to redirect requests from, separated by commas.")
+	sources := flag.String("s", "", "Source domains to redirect requests from, separated by commas. (e.g.: --s google.com,facebook.com)")
 
 	flag.Parse()
+
+	if _version {
+		fmt.Printf("version %v", version)
+		os.Exit(1)
+	}
 
 	for _, hostname := range strings.Split(*sources, ",") {
 		if hostname != "" {
@@ -113,7 +121,7 @@ func initParameters() {
 	}
 
 	if !canRedirect() {
-		printf("Proxy won't redirect, missing flags -s (sources) and/or -d (destination)")
+		printf("Proxy will act as a default proxy and won't redirect a domain to another, no sources and/or destination were specified")
 	}
 }
 
@@ -140,6 +148,8 @@ func copyRequest(u *url.URL, r *http.Request) (*http.Request, error) {
 	req.Header.Set("X-Forwarded-Proto", "http")
 	if r.TLS != nil {
 		req.Header.Set("X-Forwarded-Proto", "https")
+		req.Header.Set(http.CanonicalHeaderKey("X-Forwarded-Proto"), "https")
+		req.Header.Set(http.CanonicalHeaderKey("X-Forwarded-Port"), fmt.Sprintf("%v", _port))
 	}
 
 	req.Header.Del("Accept-Encoding")
@@ -148,7 +158,7 @@ func copyRequest(u *url.URL, r *http.Request) (*http.Request, error) {
 }
 
 func setupResponse(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, accessToken, Authorization, Accept, Range")
+	(*w).Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, accessToken, Authorization, Accept, Range, Upgrade")
 }
 
 func dialTLS(network, addr string) (net.Conn, error) {
@@ -162,7 +172,11 @@ func dialTLS(network, addr string) (net.Conn, error) {
 		return nil, err
 	}
 
-	cfg := &tls.Config{ServerName: host}
+	cfg := &tls.Config{
+		ServerName:         host,
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"h2", "http/1.1"},
+	}
 
 	tlsConn := tls.Client(conn, cfg)
 	err = tlsConn.Handshake()
@@ -199,8 +213,6 @@ func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy := NewReverseProxy(proxyURL)
-	// default timeout to 12 hour
-	proxy.Timeout = time.Hour * 12
 
 	r, _ = copyRequest(proxyURL, r)
 
