@@ -3,15 +3,17 @@ Using Windows Powershell
 > $env:GOARCH = "{arm/386/amd64}"
 > go build
 
-Using Debian and Caddy
-- cd /usr/local/go/bin/
-- go get -u github.com/mholt/caddy/caddy
-- go build github.com/mholt/caddy/caddy
-- go install github.com/mholt/caddy/caddy
-Caddy installed : `which Caddy`
-Build mlbamproxy
-- env GOOS={linux/windows/darwin} GOARCH={386/amd64} go build
-- e.g GOOS=windows GOARCH=386 go build
+Using ubuntu
+- mkdir win64 win86 linux darwin
+- env GOOS={linux/windows/darwin} GOARCH={386/amd64/arm} go build
+    - env GOOS=windows GOARCH=386 go build
+        - sudo mv go-mlbam-proxy.exe win86/mlbamproxy.exe
+    - env GOOS=windows GOARCH=amd64 go build
+        - sudo mv go-mlbam-proxy.exe win64/mlbamproxy.exe
+    - env GOOS=linux GOARCH=arm go build
+        - sudo mv go-mlbam-proxy linux/mlbamproxy
+    - env GOOS=darwin GOARCH=arm go builld
+        - sudo mv go-mlbam-proxy darwin/mlbamproxy
 - zip windows.zip {executable}
 
 .\go-mlbam-proxy.exe -p 17070 -d freegamez.ga -s mf.svc.nhl.com
