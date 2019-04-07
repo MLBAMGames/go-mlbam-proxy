@@ -13,9 +13,12 @@ import (
 
 var onExitFlushLoop func()
 
+const defaultTimeout = time.Minute * 15
+
 // ReverseProxy is an HTTP Handler that takes an incoming request
 // and sends it to another server
 type ReverseProxy struct {
+	Timeout        time.Duration
 	Director       func(*http.Request)
 	Transport      http.RoundTripper
 	FlushInterval  time.Duration
@@ -187,7 +190,6 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	outreq := new(http.Request)
-	*outreq = *req
 
 	if cn, ok := rw.(http.CloseNotifier); ok {
 		if requestCanceler, ok := transport.(requestCanceler); ok {
@@ -262,44 +264,90 @@ func (p *ReverseProxy) ProxyHTTPS(rw http.ResponseWriter, req *http.Request) {
 	hij, ok := rw.(http.Hijacker)
 	if !ok {
 		p.logf("http server does not support hijacker")
+		time.Sleep(500 * time.Millisecond)
 		return
 	}
 
 	clientConn, _, err := hij.Hijack()
 	if err != nil {
 		p.logf("http: proxy error: %v", err)
+		if clientConn != nil {
+			clientConn.Close()
+		}
 		return
 	}
 
 	proxyConn, err := net.Dial("tcp", req.URL.Host)
 	if err != nil {
 		p.logf("http: proxy error: %v", err)
+		p.logf("dial stopped %v", req.URL)
+		p.logf("client connection stopped")
+		clientConn.Close()
+		if proxyConn != nil {
+			proxyConn.Close()
+		}
+		return
+	}
+
+	deadline := time.Now()
+	if p.Timeout == 0 {
+		deadline = deadline.Add(defaultTimeout)
+	} else {
+		deadline = deadline.Add(p.Timeout)
+	}
+
+	err = clientConn.SetDeadline(deadline)
+	if err != nil {
+		p.logf("http: proxy error: %v", err)
+		clientConn.Close()
+		proxyConn.Close()
+		time.Sleep(500 * time.Millisecond)
+		return
+	}
+
+	err = proxyConn.SetDeadline(deadline)
+	if err != nil {
+		p.logf("http: proxy error: %v", err)
+		clientConn.Close()
+		proxyConn.Close()
+		time.Sleep(500 * time.Millisecond)
 		return
 	}
 
 	_, err = clientConn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 	if err != nil {
-		p.logf("http: proxy error: %v", err)
 		clientConn.Close()
 		proxyConn.Close()
 		return
 	}
 
-	go func() {
-		io.Copy(clientConn, proxyConn)
-		proxyConn.Close()
-		clientConn.Close()
-	}()
+	stop := make(chan bool)
 
-	io.Copy(proxyConn, clientConn)
-	proxyConn.Close()
-	clientConn.Close()
+	go transfer(clientConn, proxyConn, stop)
+	go transfer(proxyConn, clientConn, stop)
+
+	select {
+	case <-stop:
+		return
+	}
+}
+
+func transfer(dest io.WriteCloser, src io.ReadCloser, stop chan bool) {
+	defer func() { _ = dest.Close() }()
+	defer func() { _ = src.Close() }()
+	_, err := io.Copy(dest, src)
+	if err != nil {
+		dest.Close()
+		src.Close()
+		stop <- true
+		return
+	}
 }
 
 // ServeHTTP determines if the request is a secured scheme or not
 // and reroute to the proper proxy method
 func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if req.Method == "CONNECT" || req.URL.Scheme == "wss" {
+	if req.Method == "CONNECT" {
 		p.ProxyHTTPS(rw, req)
 	} else {
 		p.ProxyHTTP(rw, req)

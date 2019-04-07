@@ -10,9 +10,10 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
-const version = "1.1.0"
+const version = "1.1.1"
 
 type baseHandle struct{}
 
@@ -58,20 +59,20 @@ func canRedirect() bool {
 }
 
 func getScheme(r *http.Request) string {
-	if r.Method == "CONNECT" {
-		return "https"
+	if r.Method == http.MethodConnect {
+		return "http://"
 	}
-	if r.URL.Scheme == "wss" {
-		return "wss"
-	}
-	return "http"
+	return "https://"
 }
 
 func getPort(r *http.Request) string {
-	if r.URL.Scheme == "wss" {
-		return fmt.Sprintf("%v", _port)
+	if r.URL.Port() != "" {
+		return r.URL.Port()
 	}
-	return r.URL.Port()
+	if r.Method == http.MethodConnect {
+		return "433"
+	}
+	return "80"
 }
 
 func getURL(r *http.Request, isDestination bool) (*url.URL, error) {
@@ -82,9 +83,9 @@ func getURL(r *http.Request, isDestination bool) (*url.URL, error) {
 		hostname = _destination
 	}
 
-	raw := fmt.Sprintf("%v://%v:%v", getScheme(r), hostname, port)
+	raw := fmt.Sprintf("%v%v:%v", getScheme(r), hostname, port)
 	if port == "" {
-		raw = fmt.Sprintf("%v://%v", getScheme(r), hostname)
+		raw = fmt.Sprintf("%v%v", getScheme(r), hostname)
 	}
 	if r.URL.Path != "" {
 		raw = fmt.Sprintf("%v%v", raw, r.URL.Path)
@@ -158,7 +159,7 @@ func copyRequest(u *url.URL, r *http.Request) (*http.Request, error) {
 }
 
 func setupResponse(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, accessToken, Authorization, Accept, Range, Upgrade")
+	(*w).Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, accessToken, Authorization, Accept, Range")
 }
 
 func dialTLS(network, addr string) (net.Conn, error) {
@@ -169,6 +170,7 @@ func dialTLS(network, addr string) (net.Conn, error) {
 
 	host, _, err := net.SplitHostPort(addr)
 	if logError(err) {
+		conn.Close()
 		return nil, err
 	}
 
@@ -182,6 +184,7 @@ func dialTLS(network, addr string) (net.Conn, error) {
 	err = tlsConn.Handshake()
 	if logError(err) {
 		conn.Close()
+		tlsConn.Close()
 		return nil, err
 	}
 
@@ -213,6 +216,7 @@ func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy := NewReverseProxy(proxyURL)
+	proxy.Timeout = 60 * time.Minute
 
 	r, _ = copyRequest(proxyURL, r)
 
@@ -225,6 +229,17 @@ func (h *baseHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			NextProtos:         []string{"h2", "http/1.1"},
 		},
 		TLSNextProto: make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+		Proxy:        http.ProxyURL(proxyURL),
+		Dial: (&net.Dialer{
+			Timeout:       3 * time.Minute,
+			KeepAlive:     30 * time.Second,
+			FallbackDelay: 300 * time.Millisecond,
+			Deadline:      time.Now().Add(60 * time.Second),
+		}).Dial,
+		TLSHandshakeTimeout: 10 * time.Second,
+		MaxIdleConns:        100,
+		IdleConnTimeout:     30 * time.Second,
+		DisableCompression:  true,
 	}
 
 	proxy.Director = func(r *http.Request) {
@@ -240,13 +255,18 @@ func runProxyServer() {
 	http.Handle("/", h)
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", _port),
-		Handler: h,
+		Addr:              fmt.Sprintf(":%d", _port),
+		Handler:           h,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 30 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	printf("Proxy server listening on port: %d", _port)
 	err := server.ListenAndServe()
-	server.SetKeepAlivesEnabled(false)
+
 	if logError(err) {
 		return
 	}

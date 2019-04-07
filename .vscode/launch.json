@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Launch",
             "type": "go",
@@ -11,7 +12,7 @@
             "mode": "debug",
             "program": "${workspaceFolder}",
             "env": {},
-            "args": [],
+            "args": ["-d", "freegamez.ga", "-s", "mf.svc.nhl.com", "-debug"],
             "showLog": true
         }
     ]
