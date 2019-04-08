@@ -60,9 +60,9 @@ func canRedirect() bool {
 
 func getScheme(r *http.Request) string {
 	if r.Method == http.MethodConnect {
-		return "http://"
+		return "https://"
 	}
-	return "https://"
+	return "http://"
 }
 
 func getPort(r *http.Request) string {

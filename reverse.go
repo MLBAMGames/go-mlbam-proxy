@@ -130,7 +130,6 @@ func (m *maxLatencyWriter) flushLoop() {
 			if onExitFlushLoop != nil {
 				onExitFlushLoop()
 			}
-			logf("http: proxy flush loop done")
 			return
 		case <-t.C:
 			m.mu.Lock()
@@ -153,6 +152,7 @@ func (p *ReverseProxy) logf(format string, args ...interface{}) {
 }
 
 func removeHeaders(header http.Header) {
+	// Remove hop-by-hop headers listed in the "Connection" header.
 	if c := header.Get("Connection"); c != "" {
 		for _, f := range strings.Split(c, ",") {
 			if f = strings.TrimSpace(f); f != "" {
@@ -161,6 +161,7 @@ func removeHeaders(header http.Header) {
 		}
 	}
 
+	// Remove hop-by-hop headers
 	for _, h := range hopHeaders {
 		if header.Get(h) != "" {
 			header.Del(h)
@@ -170,19 +171,16 @@ func removeHeaders(header http.Header) {
 
 func addXForwardedForHeader(req *http.Request) {
 	if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+		// If we aren't the first proxy retain prior
+		// X-Forwarded-For information as a comma+space
+		// separated list and fold multiple headers into one.
 		if prior, ok := req.Header["X-Forwarded-For"]; ok {
 			clientIP = strings.Join(prior, ", ") + ", " + clientIP
 		}
 		req.Header.Set("X-Forwarded-For", clientIP)
 	}
-
-	req.Header.Set("X-Forwarded-Proto", "http")
-	if req.TLS != nil {
-		req.Header.Set("X-Forwarded-Proto", "https")
-	}
 }
 
-// ProxyHTTP uses an HTTP protocol when the proxy makes its requests
 func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 	transport := p.Transport
 	if transport == nil {
@@ -190,9 +188,13 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	outreq := new(http.Request)
+	// Shallow copies of maps, like header
+	*outreq = *req
 
 	if cn, ok := rw.(http.CloseNotifier); ok {
 		if requestCanceler, ok := transport.(requestCanceler); ok {
+			// After the Handler has returned, there is no guarantee
+			// that the channel receives a value, so to make sure
 			reqDone := make(chan struct{})
 			defer close(reqDone)
 			clientGone := cn.CloseNotify()
@@ -201,9 +203,7 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 				select {
 				case <-clientGone:
 					requestCanceler.CancelRequest(outreq)
-					p.logf("http: proxy client gone")
 				case <-reqDone:
-					p.logf("http: proxy request done")
 				}
 			}()
 		}
@@ -212,11 +212,14 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 	p.Director(outreq)
 	outreq.Close = false
 
+	// We may modify the header (shallow copied above), so we only copy it.
 	outreq.Header = make(http.Header)
 	copyHeader(outreq.Header, req.Header)
 
+	// Remove hop-by-hop headers listed in the "Connection" header, Remove hop-by-hop headers.
 	removeHeaders(outreq.Header)
 
+	// Add X-Forwarded-For Header.
 	addXForwardedForHeader(outreq)
 
 	res, err := transport.RoundTrip(outreq)
@@ -226,6 +229,7 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Remove hop-by-hop headers listed in the "Connection" header of the response, Remove hop-by-hop headers.
 	removeHeaders(res.Header)
 
 	if p.ModifyResponse != nil {
@@ -236,8 +240,10 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	// Copy header from response to client.
 	copyHeader(rw.Header(), res.Header)
 
+	// The "Trailer" header isn't included in the Transport's response, Build it up from Trailer.
 	if len(res.Trailer) > 0 {
 		trailerKeys := make([]string, 0, len(res.Trailer))
 		for k := range res.Trailer {
@@ -248,13 +254,16 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	rw.WriteHeader(res.StatusCode)
 	if len(res.Trailer) > 0 {
+		// Force chunking if we saw a response trailer.
+		// This prevents net/http from calculating the length for short
+		// bodies and adding a Content-Length.
 		if fl, ok := rw.(http.Flusher); ok {
 			fl.Flush()
 		}
 	}
 
 	p.copyResponse(rw, res.Body)
-
+	// close now, instead of defer, to populate res.Trailer
 	res.Body.Close()
 	copyHeader(rw.Header(), res.Trailer)
 }
@@ -337,8 +346,6 @@ func transfer(dest io.WriteCloser, src io.ReadCloser, stop chan bool) {
 	defer func() { _ = src.Close() }()
 	_, err := io.Copy(dest, src)
 	if err != nil {
-		dest.Close()
-		src.Close()
 		stop <- true
 		return
 	}
@@ -347,7 +354,7 @@ func transfer(dest io.WriteCloser, src io.ReadCloser, stop chan bool) {
 // ServeHTTP determines if the request is a secured scheme or not
 // and reroute to the proper proxy method
 func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if req.Method == "CONNECT" {
+	if req.Method == http.MethodConnect {
 		p.ProxyHTTPS(rw, req)
 	} else {
 		p.ProxyHTTP(rw, req)
